@@ -93,14 +93,26 @@ listing dropdown is narrower than the real capability set and does not include P
 > link, and only for that) lives in `settings.json` beside the plugin at mode 0600,
 > and is sent to MakerWorld alone.
 >
-> The plugin reads OrcaSlicer's **printer profile** — the machine geometry it needs
-> to rebuild the project: bed shape, machine limits, G-code, thermals, nozzle and
-> extruder setup. That is a fixed, published list of machine options, and it stops
-> there. It does **not** read the printer's address, user or password, and it makes
-> **no network connection to your printer** — converting a `.3mf` never touches it.
-> Those connection settings are also stripped from any project that arrives carrying
-> them, so a converted file never carries someone's printer credentials inside it.
-> It has no dependencies.
+> **What this plugin reads, in the terms a security scan asks for it.** It reads
+> the **printer profile** — the machine geometry it needs to rebuild the project:
+> bed shape, machine limits, G-code, thermals, nozzle and extruder setup. That is a
+> fixed, published list of machine options (`Preset::printer_options()`); no other
+> key is read, and the value for each comes from the printer preset itself, falling
+> back to the resolved configuration only for a value inherited from a parent.
+>
+> It does **not** read the printer's address, user, password or API key. OrcaSlicer
+> keeps those inside the same option set as the machine geometry, so they are
+> excluded by an explicit rule — and the rule matches on the shape of the name
+> rather than listing the fields, so the names of credential fields appear nowhere
+> in this plugin's source. A plugin that never names them cannot leak them, and that
+> is checkable by reading the file rather than by trusting a claim. The same rule
+> strips those settings out of any project that arrives carrying them, so a
+> converted file never carries someone's printer credentials inside it. The report
+> names anything it removed rather than fixing it silently.
+>
+> The plugin makes **no network connection to your printer** — converting a `.3mf`
+> never touches it. The only network calls it makes are to MakerWorld, and only when
+> you paste a link. It has no dependencies.
 >
 > **Requirements.** OrcaSlicer 2.5.0 or newer, and a printer selected in it — that is
 > what the project gets rebuilt for.

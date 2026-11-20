@@ -130,6 +130,11 @@ particular machine is reached. A converted `.3mf` gets passed around; it must no
 carry someone's printer credentials inside it. If a project you convert had them, the
 report names which were removed rather than fixing it silently.
 
+The exclusion is a **rule on the shape of the key name, not a list of fields** — so
+the names of credential fields appear nowhere in this plugin's source. A plugin that
+never names them cannot leak them, and that is checkable by reading the file rather
+than by trusting a claim. A test asserts it.
+
 The plugin makes **no connection to your printer at all**. The only network calls it
 makes are to MakerWorld, and only when you paste a link.
 

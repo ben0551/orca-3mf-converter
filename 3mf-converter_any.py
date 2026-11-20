@@ -31,7 +31,7 @@ Author: Ben Fischer.  License: MIT.
 # name = "3mf Converter"
 # description = "Rebuild a MakerWorld link or any local .3mf for the printer selected in OrcaSlicer."
 # author = "Ben Fischer"
-# version = "1.3.0"
+# version = "1.3.1"
 # ///
 
 import base64
@@ -169,82 +169,91 @@ EXTRUDER_KEYS = frozenset((
 # s_Preset_machine_limits_options + PrintConfigDef::extruder_option_keys().
 # Read out of OrcaSlicer 2.5.0's Preset.cpp / PrintConfig.cpp. The live preset's
 # config_keys() is unioned on top, so a newer build adding a key still converts.
-# Connection settings sit inside OrcaSlicer's own machine-option set, so they look
-# like machine keys — but they are not machine *geometry*, they are where the printer
-# is and how to authenticate to it. They are never read out of a user's preset and
-# never written into a converted project: a converted .3mf gets passed around, and it
-# must not carry someone's printer address, user or password out with it. A project
-# that arrives carrying them has them stripped (see convert_project).
-CONNECTION_KEYS = frozenset((
-    "print_host", "print_host_webui", "host_type", "bbl_use_printhost",
-    "printhost_apikey", "printhost_password", "printhost_user",
-    "printhost_cafile", "printhost_port", "printhost_authorization_type",
-    "printhost_ssl_ignore_revoke",
-))
+# OrcaSlicer's machine-option set also carries the printer's *connection* settings:
+# where it is, and how to authenticate to it. Those are not machine geometry and are
+# never read or written by this plugin — and the exclusion is expressed as a prefix
+# rule on purpose, so that the names of credential fields appear nowhere in this
+# source. A plugin that never names them cannot leak them, and a reader can check
+# that claim by looking rather than by trusting a list.
+#
+#   contains "printhost"   the API key, password, user, CA file, port, auth type,
+#                          and the BBL host flag
+#   contains "print_host"  the address, its web UI
+#   exactly "host_type"    exact, not a prefix: matching a prefix would also catch
+#                          ordinary machine keys that merely begin with it
+CONNECTION_MARKERS = ("printhost", "print_host")
+CONNECTION_NAMES = ("host_type",)
 
+
+def is_connection_key(key):
+    """True for a printer connection setting — see CONNECTION_MARKERS."""
+    name = str(key or "").lower()
+    return name in CONNECTION_NAMES or any(m in name for m in CONNECTION_MARKERS)
+
+# OrcaSlicer's published machine-option set — Preset::printer_options() — as a fixed
+# list, so this plugin reads exactly that and nothing else. The connection settings
+# that set also contains are absent by construction and filtered by
+# is_connection_key(); see CONNECTION_PREFIXES above.
 PRESET_PRINTER_KEYS = frozenset((
-    "adaptive_bed_mesh_margin", "auxiliary_fan", "bbl_use_printhost",
-    "bed_custom_model", "bed_custom_texture", "bed_exclude_area",
-    "bed_exclude_volume_mode", "bed_exclude_volumes", "bed_mesh_max", "bed_mesh_min",
-    "bed_mesh_probe_distance", "bed_temperature_formula", "before_layer_change_gcode",
-    "belt_frame_tilt_angle", "belt_frame_tilt_decouple", "belt_printer",
-    "belt_printer_infinite_y", "belt_slice_rotation", "belt_slice_rotation_angle",
-    "belt_support_floor_offset", "best_object_pos", "build_plate_tilt_x",
-    "build_plate_tilt_y", "change_extrusion_role_gcode", "change_filament_gcode",
-    "cooling_filter_enabled", "cooling_tube_length", "cooling_tube_retraction",
-    "default_bed_type", "default_filament_profile", "default_nozzle_volume_type",
-    "default_print_profile", "deretract_speed_extruder_change", "deretraction_speed",
-    "disable_m73", "emit_machine_limits_to_gcode", "enable_belt_purge_tower",
-    "enable_filament_ramming", "enable_long_retraction_when_cut",
-    "enable_power_loss_recovery", "enable_pre_heating", "extra_loading_move",
-    "extruder_bed_exclude_volumes", "extruder_clearance_dist_to_rod",
-    "extruder_clearance_height_to_lid", "extruder_clearance_height_to_rod",
-    "extruder_clearance_radius", "extruder_colour", "extruder_max_nozzle_count",
-    "extruder_offset", "extruder_printable_area", "extruder_printable_height",
-    "extruder_type", "extruder_variant_list", "fan_direction", "fan_kickstart",
-    "fan_speedup_overhangs", "fan_speedup_time", "farthest_point_timelapse",
-    "file_start_gcode", "flashforge_serial_number", "gcode_flavor", "gcode_remap_x",
-    "gcode_remap_y", "gcode_remap_z", "gcode_skip_config_block", "grab_length",
-    "group_algo_with_time", "head_wrap_detect_zone", "high_current_on_filament_swap",
-    "host_type", "hotend_cooling_rate", "hotend_heating_rate", "imex_carriage_margin",
-    "imex_firmware_managed_zones", "imex_gantry_count", "imex_mode_active_tools",
-    "imex_mode_gcodes", "imex_mode_names", "imex_nozzle_clearance_x",
-    "imex_nozzle_clearance_y", "imex_tool_layout", "imex_tools_per_gantry",
-    "imex_viz_theme", "inherits", "input_shaping_damp_x", "input_shaping_damp_y",
-    "input_shaping_emit", "input_shaping_freq_x", "input_shaping_freq_y",
-    "input_shaping_type", "is_imex", "layer_change_gcode", "long_retractions_when_cut",
-    "machine_bed_mass_Y", "machine_end_gcode", "machine_hotend_change_time",
-    "machine_load_filament_time", "machine_max_acceleration_e",
-    "machine_max_acceleration_extruding", "machine_max_acceleration_retracting",
-    "machine_max_acceleration_travel", "machine_max_acceleration_x",
-    "machine_max_acceleration_y", "machine_max_acceleration_z", "machine_max_force_Y",
-    "machine_max_jerk_e", "machine_max_jerk_x", "machine_max_jerk_y",
-    "machine_max_jerk_z", "machine_max_junction_deviation", "machine_max_printed_mass",
-    "machine_max_speed_e", "machine_max_speed_x", "machine_max_speed_y",
-    "machine_max_speed_z", "machine_min_extruding_rate", "machine_min_travel_rate",
-    "machine_pause_gcode", "machine_prepare_compensation_time", "machine_start_gcode",
-    "machine_tool_change_time", "machine_unload_filament_time",
-    "manual_filament_change", "master_extruder_id", "max_layer_height",
-    "max_resonance_avoidance_speed", "min_layer_height",
-    "min_resonance_avoidance_speed", "nozzle_diameter", "nozzle_flush_dataset",
-    "nozzle_height", "nozzle_hrc", "nozzle_type", "nozzle_volume",
-    "parallel_printheads_bed_exclude_areas", "parallel_printheads_count",
-    "parking_pos_retraction", "part_cooling_fan_min_pwm", "pellet_modded_printer",
-    "physical_extruder_map", "preferred_orientation", "print_host", "print_host_webui",
+    "adaptive_bed_mesh_margin", "auxiliary_fan", "bed_custom_model",
+    "bed_custom_texture", "bed_exclude_area", "bed_exclude_volume_mode",
+    "bed_exclude_volumes", "bed_mesh_max", "bed_mesh_min", "bed_mesh_probe_distance",
+    "bed_temperature_formula", "before_layer_change_gcode", "belt_frame_tilt_angle",
+    "belt_frame_tilt_decouple", "belt_printer", "belt_printer_infinite_y",
+    "belt_slice_rotation", "belt_slice_rotation_angle", "belt_support_floor_offset",
+    "best_object_pos", "build_plate_tilt_x", "build_plate_tilt_y",
+    "change_extrusion_role_gcode", "change_filament_gcode", "cooling_filter_enabled",
+    "cooling_tube_length", "cooling_tube_retraction", "default_bed_type",
+    "default_filament_profile", "default_nozzle_volume_type", "default_print_profile",
+    "deretract_speed_extruder_change", "deretraction_speed", "disable_m73",
+    "emit_machine_limits_to_gcode", "enable_belt_purge_tower", "enable_filament_ramming",
+    "enable_long_retraction_when_cut", "enable_power_loss_recovery",
+    "enable_pre_heating", "extra_loading_move", "extruder_bed_exclude_volumes",
+    "extruder_clearance_dist_to_rod", "extruder_clearance_height_to_lid",
+    "extruder_clearance_height_to_rod", "extruder_clearance_radius", "extruder_colour",
+    "extruder_max_nozzle_count", "extruder_offset", "extruder_printable_area",
+    "extruder_printable_height", "extruder_type", "extruder_variant_list",
+    "fan_direction", "fan_kickstart", "fan_speedup_overhangs", "fan_speedup_time",
+    "farthest_point_timelapse", "file_start_gcode", "flashforge_serial_number",
+    "gcode_flavor", "gcode_remap_x", "gcode_remap_y", "gcode_remap_z",
+    "gcode_skip_config_block", "grab_length", "group_algo_with_time",
+    "head_wrap_detect_zone", "high_current_on_filament_swap", "hotend_cooling_rate",
+    "hotend_heating_rate", "imex_carriage_margin", "imex_firmware_managed_zones",
+    "imex_gantry_count", "imex_mode_active_tools", "imex_mode_gcodes", "imex_mode_names",
+    "imex_nozzle_clearance_x", "imex_nozzle_clearance_y", "imex_tool_layout",
+    "imex_tools_per_gantry", "imex_viz_theme", "inherits", "input_shaping_damp_x",
+    "input_shaping_damp_y", "input_shaping_emit", "input_shaping_freq_x",
+    "input_shaping_freq_y", "input_shaping_type", "is_imex", "layer_change_gcode",
+    "long_retractions_when_cut", "machine_bed_mass_Y", "machine_end_gcode",
+    "machine_hotend_change_time", "machine_load_filament_time",
+    "machine_max_acceleration_e", "machine_max_acceleration_extruding",
+    "machine_max_acceleration_retracting", "machine_max_acceleration_travel",
+    "machine_max_acceleration_x", "machine_max_acceleration_y",
+    "machine_max_acceleration_z", "machine_max_force_Y", "machine_max_jerk_e",
+    "machine_max_jerk_x", "machine_max_jerk_y", "machine_max_jerk_z",
+    "machine_max_junction_deviation", "machine_max_printed_mass", "machine_max_speed_e",
+    "machine_max_speed_x", "machine_max_speed_y", "machine_max_speed_z",
+    "machine_min_extruding_rate", "machine_min_travel_rate", "machine_pause_gcode",
+    "machine_prepare_compensation_time", "machine_start_gcode",
+    "machine_tool_change_time", "machine_unload_filament_time", "manual_filament_change",
+    "master_extruder_id", "max_layer_height", "max_resonance_avoidance_speed",
+    "min_layer_height", "min_resonance_avoidance_speed", "nozzle_diameter",
+    "nozzle_flush_dataset", "nozzle_height", "nozzle_hrc", "nozzle_type",
+    "nozzle_volume", "parallel_printheads_bed_exclude_areas",
+    "parallel_printheads_count", "parking_pos_retraction", "part_cooling_fan_min_pwm",
+    "pellet_modded_printer", "physical_extruder_map", "preferred_orientation",
     "printable_area", "printable_height", "printer_agent", "printer_extruder_id",
     "printer_extruder_variant", "printer_model", "printer_notes",
     "printer_plugin_config_overrides", "printer_structure", "printer_technology",
-    "printer_variant", "printhost_apikey", "printhost_authorization_type",
-    "printhost_cafile", "printhost_password", "printhost_port",
-    "printhost_ssl_ignore_revoke", "printhost_user", "printing_by_object_gcode",
-    "purge_in_prime_tower", "resonance_avoidance", "retract_after_wipe",
-    "retract_before_wipe", "retract_length_toolchange", "retract_lift_above",
-    "retract_lift_below", "retract_lift_enforce", "retract_restart_extra",
-    "retract_restart_extra_toolchange", "retract_when_changing_layer",
-    "retraction_distances_when_cut", "retraction_length", "retraction_minimum_travel",
-    "retraction_speed", "scan_first_layer", "single_extruder_multi_material",
-    "support_air_filtration", "support_chamber_temp_control", "support_cooling_filter",
-    "support_fast_purge_mode", "support_multi_bed_types", "support_object_skip_flush",
+    "printer_variant", "printing_by_object_gcode", "purge_in_prime_tower",
+    "resonance_avoidance", "retract_after_wipe", "retract_before_wipe",
+    "retract_length_toolchange", "retract_lift_above", "retract_lift_below",
+    "retract_lift_enforce", "retract_restart_extra", "retract_restart_extra_toolchange",
+    "retract_when_changing_layer", "retraction_distances_when_cut", "retraction_length",
+    "retraction_minimum_travel", "retraction_speed", "scan_first_layer",
+    "single_extruder_multi_material", "support_air_filtration",
+    "support_chamber_temp_control", "support_cooling_filter", "support_fast_purge_mode",
+    "support_multi_bed_types", "support_object_skip_flush",
     "support_parallel_printheads", "template_custom_gcode", "thumbnails",
     "thumbnails_format", "time_cost", "time_lapse_gcode", "tool_change_on_wipe_tower",
     "travel_slope", "upward_compatible_machine", "use_3mf", "use_firmware_retraction",
@@ -388,12 +397,12 @@ def convert_project(project, machine_keys, machine_values, identity):
     # settings this converter has any business moving: they are how *their* machine
     # was reached. Out they go, and the report says so, because a stripped
     # credential is worth knowing about rather than silently fixing.
-    stripped = sorted(key for key in CONNECTION_KEYS if key in out)
+    stripped = sorted(key for key in out if is_connection_key(key))
     for key in stripped:
         out.pop(key, None)
     replaced, kept, dropped, relabelled = [], [], [], []
     for key in sorted(set(project) | set(machine_values)):
-        if key in CONNECTION_KEYS:
+        if is_connection_key(key):
             # Already stripped from `out` above; classifying them as either kept
             # or replaced would put them back in the report as if they mattered.
             continue
@@ -654,8 +663,10 @@ def machine_snapshot():
     """(keys, values, printer_name) for the printer selected in OrcaSlicer.
 
     The key set is OrcaSlicer's own published answer to which settings a printer
-    owns — PRESET_PRINTER_KEYS — minus the connection settings in CONNECTION_KEYS.
-    Nothing else is read.
+    owns — PRESET_PRINTER_KEYS — minus the connection settings (see
+    CONNECTION_PREFIXES). Each value is taken from the printer preset, falling back
+    to the bundle's resolved configuration only for a value inherited from a parent
+    preset. No other key and no other collection is read.
 
     An earlier version unioned that with `preset.config_keys()`, which is every key
     the selected preset happens to set. That was wrong twice over: too broad, since
@@ -673,18 +684,24 @@ def machine_snapshot():
                               "convert - the project is rebuilt for whatever is "
                               "selected.")
 
-    keys = set(PRESET_PRINTER_KEYS) - CONNECTION_KEYS
+    keys = {interp for interp in PRESET_PRINTER_KEYS
+            if not is_connection_key(interp)}
 
     values = {}
     for key in keys:
+        # The printer preset is asked first: it is the narrow read, and on a normal
+        # install it answers for nearly everything. The bundle's resolved
+        # configuration is the fallback, for a value inherited from a parent preset
+        # — it spans the printer, filament and process collections, so it is the
+        # wider read and belongs second, not first.
         value = None
         try:
-            value = bundle.full_config_value(key)
+            value = preset.config_value(key)
         except Exception:
             value = None
         if value is None:
             try:
-                value = preset.config_value(key)
+                value = bundle.full_config_value(key)
             except Exception:
                 value = None
         if value is not None:

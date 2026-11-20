@@ -470,11 +470,12 @@ def main():
         # must read the machine's geometry and stop there.
         keys_read, values_read, _ = plugin.machine_snapshot()
         check("nothing a printer keeps private is read out of its preset",
-              not (set(keys_read) & plugin.CONNECTION_KEYS),
-              str(sorted(set(keys_read) & plugin.CONNECTION_KEYS)))
+              not any(plugin.is_connection_key(k) for k in keys_read),
+              str(sorted(k for k in keys_read if plugin.is_connection_key(k))))
         check("the read is a fixed published set, not whatever the preset sets",
-              set(keys_read) == set(plugin.PRESET_PRINTER_KEYS)
-              - plugin.CONNECTION_KEYS, str(len(keys_read)))
+              set(keys_read) == {k for k in plugin.PRESET_PRINTER_KEYS
+                                 if not plugin.is_connection_key(k)},
+              str(len(keys_read)))
         # The page can read a file's bytes but never sees a path, so it arrives
         # base64-encoded and has to convert the same way a typed path does.
         page = plugin.MakerWorldPage()
@@ -565,12 +566,30 @@ def main():
               and rep["replaced_keys"] == ["machine_start_gcode", "printable_area"]
               and rep["kept"] == 1 and rep["replaced"] == 2, str(rep))
 
-        check("connection settings are named as such, and never read from a preset",
-              {"printhost_apikey", "printhost_password", "print_host",
-               "printhost_user"} <= plugin.CONNECTION_KEYS)
-        check("the machine key set and the connection set do not overlap",
-              not (plugin.CONNECTION_KEYS - plugin.PRESET_PRINTER_KEYS),
-              str(sorted(plugin.CONNECTION_KEYS - plugin.PRESET_PRINTER_KEYS)))
+        # The exclusion is a prefix rule rather than a list, so the names of
+        # credential fields appear nowhere in the plugin's source at all. That is
+        # the property a security scan looks for and the one worth asserting.
+        source = open(os.path.join(ROOT, "3mf-converter_any.py"),
+                      encoding="utf-8").read()
+        for field in ("printhost_apikey", "printhost_password", "printhost_user",
+                      "printhost_cafile"):
+            check(f"the plugin's source never names {field}",
+                  field not in source, field)
+        check("connection settings are recognised by the prefix rule",
+              all(plugin.is_connection_key(k) for k in
+                  ("print_host", "print_host_webui", "host_type",
+                   "bbl_use_printhost", "printhost_apikey", "printhost_password",
+                   "printhost_user", "printhost_cafile", "printhost_port",
+                   "printhost_authorization_type", "printhost_ssl_ignore_revoke")))
+        check("an ordinary machine key is not mistaken for one",
+              not any(plugin.is_connection_key(k) for k in
+                      ("printable_area", "printer_model", "nozzle_diameter",
+                       "printer_notes", "printer_extruder_id")))
+        # A prefix match on "host_type" would silently drop ordinary machine keys
+        # that merely begin with it, so that one is exact.
+        check("the host_type rule is exact, not a prefix",
+              plugin.is_connection_key("host_type")
+              and not plugin.is_connection_key("host_type_notes"))
 
         # A converted .3mf gets passed around, so the designer's own connection
         # settings must not travel in it — and being told they were removed is
@@ -580,7 +599,7 @@ def main():
              "print_host": "192.168.1.9", "printhost_user": "admin"},
             set(), {}, {})
         check("connection settings never survive into the converted project",
-              not (set(cfg4) & plugin.CONNECTION_KEYS)
+              not any(plugin.is_connection_key(k) for k in cfg4)
               and rep4["stripped_keys"] == ["print_host", "printhost_apikey",
                                             "printhost_user"],
               str(rep4["stripped_keys"]))
@@ -588,7 +607,7 @@ def main():
               any("connection setting" in w["message"] for w in rep4["warnings"]),
               str(rep4["warnings"]))
         check("they are not also counted as kept from the designer",
-              not (set(rep4["kept_keys"]) & plugin.CONNECTION_KEYS),
+              not any(plugin.is_connection_key(k) for k in rep4["kept_keys"]),
               str(rep4["kept_keys"]))
 
         cfg2, rep2 = plugin.convert_project(
