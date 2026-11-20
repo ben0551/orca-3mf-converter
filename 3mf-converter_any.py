@@ -193,7 +193,7 @@ def is_connection_key(key):
 # OrcaSlicer's published machine-option set — Preset::printer_options() — as a fixed
 # list, so this plugin reads exactly that and nothing else. The connection settings
 # that set also contains are absent by construction and filtered by
-# is_connection_key(); see CONNECTION_PREFIXES above.
+# is_connection_key(); see CONNECTION_MARKERS above.
 PRESET_PRINTER_KEYS = frozenset((
     "adaptive_bed_mesh_margin", "auxiliary_fan", "bed_custom_model",
     "bed_custom_texture", "bed_exclude_area", "bed_exclude_volume_mode",
@@ -664,7 +664,7 @@ def machine_snapshot():
 
     The key set is OrcaSlicer's own published answer to which settings a printer
     owns — PRESET_PRINTER_KEYS — minus the connection settings (see
-    CONNECTION_PREFIXES). Each value is taken from the printer preset, falling back
+    CONNECTION_MARKERS). Each value is taken from the printer preset, falling back
     to the bundle's resolved configuration only for a value inherited from a parent
     preset. No other key and no other collection is read.
 
