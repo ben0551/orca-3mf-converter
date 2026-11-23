@@ -31,7 +31,7 @@ Author: Ben Fischer.  License: MIT.
 # name = "3mf Converter"
 # description = "Rebuild a MakerWorld link or any local .3mf for the printer selected in OrcaSlicer."
 # author = "Ben Fischer"
-# version = "1.3.1"
+# version = "1.3.2"
 # ///
 
 import base64
@@ -931,7 +931,8 @@ MAKERWORLD_PAGE = """
   button { padding: 5px 10px; font: inherit; cursor: pointer; border-radius: 4px;
            color: var(--orca-fg); background: var(--orca-bg);
            border: 1px solid var(--orca-border); }
-  button.primary { background: var(--orca-accent, #2f9e6f); border-color: transparent; color: #fff; }
+  button.primary { background: var(--orca-accent, #2f9e6f); border-color: transparent;
+                  color: var(--orca-accent-fg, #fff); }
   button.quiet { background: transparent; }
   button:disabled { opacity: .55; cursor: default; }
   .panel { border: 1px solid var(--orca-border); border-radius: 6px; padding: 10px; margin-bottom: 12px; }
@@ -941,7 +942,7 @@ MAKERWORLD_PAGE = """
   .plate .meta { color: var(--orca-muted); font-size: 11px; white-space: nowrap; }
   #banner { display: none; margin-top: 10px; padding: 7px 9px; border-radius: 4px;
             border: 1px solid var(--orca-border); white-space: pre-wrap; }
-  #banner.err { border-color: #c0567f; }
+  #banner.err { border-color: #c0392b; }
   #banner.ok { border-color: #2f9e6f; }
   #report { font-size: 12px; }
   #report .line { margin-bottom: 3px; }

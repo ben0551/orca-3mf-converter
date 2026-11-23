@@ -51,6 +51,14 @@ independently.
 2. OrcaSlicer prompts for the filesystem and network access the plugin declares.
    Accept both — without the network permission a MakerWorld link cannot resolve.
 
+## Theme
+
+The tab follows OrcaSlicer. It takes its background, text, border, muted text,
+accent and font from the variables OrcaSlicer injects into every plugin page
+(`--orca-bg`, `--orca-fg`, `--orca-border`, `--orca-muted`, `--orca-accent`,
+`--orca-accent-fg`, `--orca-font`), and it re-themes live when the app theme
+changes. It does not pin itself to dark.
+
 ## The tab
 
 **A `.3mf` you already have is the easy route.** Drop it on the tab, or use the
