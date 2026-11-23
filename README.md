@@ -57,7 +57,11 @@ The tab follows OrcaSlicer. It takes its background, text, border, muted text,
 accent and font from the variables OrcaSlicer injects into every plugin page
 (`--orca-bg`, `--orca-fg`, `--orca-border`, `--orca-muted`, `--orca-accent`,
 `--orca-accent-fg`, `--orca-font`), and it re-themes live when the app theme
-changes. It does not pin itself to dark.
+changes. It does not pin itself to dark. The button rules are written `body button` rather
+than bare `button` on purpose: OrcaSlicer injects its own default `button` style into
+`<head>` *after* the page's stylesheet, at the same specificity, so an unqualified rule
+would lose to it — and the host's default is white text on the accent, which is
+invisible on a light-theme accent.
 
 ## The tab
 

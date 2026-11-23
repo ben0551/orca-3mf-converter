@@ -106,6 +106,9 @@ def main():
              'id="drop"' in page and 'id="browse"' in page
              and 'id="file"' in page and 'type="file"' in page and '.3mf"' in page),
             ("the typed-path box is out of the flow, behind a fallback link",
+            ("the page's buttons outrank the host's injected defaults",
+             "body button" in page
+             and re.search(r"(?<![\\w.#:>~ ])button\\s*\\{", page) is None),
              'id="pathRow"' in page and ' hidden' in
              re.search(r'<div[^>]*id="pathRow"[^>]*>', page).group(0)
              and 'id="showPath"' in page and 'id="convertPath"' in page),
