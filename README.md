@@ -51,6 +51,15 @@ independently.
 2. OrcaSlicer prompts for the filesystem and network access the plugin declares.
    Accept both — without the network permission a MakerWorld link cannot resolve.
 
+## Where the token is kept
+
+The BambuCloud token is stored in `settings.json` at
+`<OrcaSlicer data>/orca_plugin_data/3mf-converter/`, **not** in the plugin's own
+directory. Installing a new plugin version replaces `orca_plugins/<plugin>/`, which
+took a token saved beside the plugin with it — the token was lost on every update.
+The old location is still read, so a token saved by an earlier version carries over
+the first time you save again.
+
 ## Theme
 
 The tab follows OrcaSlicer. It takes its background, text, border, muted text,

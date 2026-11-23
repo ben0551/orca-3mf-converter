@@ -27,7 +27,7 @@ Author: Ben Fischer.  License: MIT.
 # name = "3mf Converter"
 # description = "Rebuild a MakerWorld link or any local .3mf for the printer selected in OrcaSlicer."
 # author = "Ben Fischer"
-# version = "1.3.3"
+# version = "1.3.4"
 # ///
 
 import base64
@@ -50,7 +50,44 @@ import orca
 # --------------------------------------------------------------------------- #
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_FILE = os.path.join(PLUGIN_DIR, "settings.json")
+# Where versions before the durable home kept settings.json. Still read,
+# so an update finds what the user already saved; never written again.
+LEGACY_SETTINGS_FILE = os.path.join(PLUGIN_DIR, "settings.json")
+
+SETTINGS_SLUG = '3mf-converter'
+
+
+def orca_data_dir():
+    """Orca's data directory, or '' when this file is not installed as a plugin.
+
+    Plugins live at <datadir>/orca_plugins/<name>/<file>.py and cloud-subscribed
+    ones a level deeper, so walk up until orca_plugins is the child.
+    """
+    path = PLUGIN_DIR
+    while True:
+        parent, leaf = os.path.split(path)
+        if leaf == "orca_plugins":
+            return parent
+        if not parent or parent == path:
+            return ""
+        path = parent
+
+
+def settings_home():
+    """The directory settings.json belongs in.
+
+    Installing a new plugin version replaces <datadir>/orca_plugins/<plugin>/,
+    which takes a settings file kept there with it — a saved token was lost on
+    every update. A sibling of orca_plugins rather than something inside it, so
+    OrcaSlicer's plugin scanner does not read the directory as a plugin. Falls
+    back to the plugin directory outside OrcaSlicer, where there is no update to
+    survive.
+    """
+    datadir = orca_data_dir()
+    if not datadir:
+        return PLUGIN_DIR
+    return os.path.join(datadir, "orca_plugin_data", SETTINGS_SLUG)
+
 # Converted projects. Inside the plugin's own directory because the audit
 # hook only grants writes under roots the plugin declared, and because the
 # running OrcaSlicer has to be able to read the path we hand it.
@@ -69,24 +106,42 @@ _SETTINGS_KEYS = ("bambu_token",)
 def _default_settings():
     return {"bambu_token": os.environ.get("MWC5_BAMBU_TOKEN", "")}
 
+def _read_stored(path):
+    """A parsed settings.json, or None when it is absent or unusable."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            stored = json.load(fh)
+    except Exception:
+        return None          # absent or unreadable: never stop the plugin loading
+    return stored if isinstance(stored, dict) else None
+
+
 def load_settings():
-    """Read settings.json, falling back to env vars and then to empty values."""
+    """Read settings.json, falling back to env vars and then to empty values.
+
+    The durable copy is read first; the copy older versions kept in the plugin
+    directory is the fallback, so updating does not strand what was saved.
+    """
     global _SETTINGS_CACHE
     with _SETTINGS_LOCK:
         if _SETTINGS_CACHE is not None:
             return dict(_SETTINGS_CACHE)
         data = _default_settings()
-        try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as fh:
-                stored = json.load(fh)
-            if isinstance(stored, dict):
-                for key in _SETTINGS_KEYS:
-                    if stored.get(key) not in (None, ""):
-                        data[key] = stored[key]
-        except FileNotFoundError:
-            pass
-        except Exception:
-            pass  # unreadable/corrupt settings must not stop the plugin loading
+        home = settings_home()
+        candidates = [os.path.join(home, "settings.json")]
+        if home != PLUGIN_DIR:
+            candidates.append(LEGACY_SETTINGS_FILE)
+        for path in candidates:
+            stored = _read_stored(path)
+            if not stored:
+                continue
+            found = False
+            for key in _SETTINGS_KEYS:
+                if stored.get(key) not in (None, ""):
+                    data[key] = stored[key]
+                    found = True
+            if found:
+                break
         _SETTINGS_CACHE = dict(data)
         return dict(data)
 
@@ -100,13 +155,15 @@ def save_settings(update):
             current[key] = update[key]
     with _SETTINGS_LOCK:
         try:
-            os.makedirs(PLUGIN_DIR, exist_ok=True)
-            tmp = SETTINGS_FILE + ".tmp"
+            home = settings_home()
+            os.makedirs(home, exist_ok=True)
+            target = os.path.join(home, "settings.json")
+            tmp = target + ".tmp"
             with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(current, fh, indent=2, sort_keys=True)
-            os.replace(tmp, SETTINGS_FILE)
+            os.replace(tmp, target)
             try:
-                os.chmod(SETTINGS_FILE, 0o600)
+                os.chmod(target, 0o600)
             except OSError:
                 pass
         except Exception as exc:
@@ -755,21 +812,6 @@ def convert_3mf(blob):
 # running instance already listens for the message a *second* launch would send it
 # (InstanceCheck.cpp), and file paths there reach EVT_LOAD_MODEL_OTHER_INSTANCE,
 # which is the plater. Each platform has its own transport.
-
-def orca_data_dir():
-    """Orca's data directory, or '' when this file is not installed as a plugin.
-
-    Plugins live at <datadir>/orca_plugins/<name>/<file>.py and cloud-subscribed
-    ones a level deeper, so walk up until orca_plugins is the child.
-    """
-    path = os.path.dirname(os.path.abspath(__file__))
-    while True:
-        parent, leaf = os.path.split(path)
-        if leaf == "orca_plugins":
-            return parent
-        if not parent or parent == path:
-            return ""
-        path = parent
 
 
 def instance_payload(paths):
@@ -1632,7 +1674,11 @@ class MakerWorldC5Plugin(orca.base):
                     "https://api.bambulab.com",
                     "https://makerworld.bblmw.com",
                 ],
-                fs_readwrite=[PLUGIN_DIR],
+                # PLUGIN_DIR holds the converted projects. The settings home
+                # sits beside orca_plugins, so an update does not take the
+                # saved token with it.
+                fs_readwrite=[PLUGIN_DIR]
+                + ([] if settings_home() == PLUGIN_DIR else [settings_home()]),
                 # Handing a finished project to the running instance means running
                 # the platform's own messenger. Process targets are matched
                 # verbatim, so both the bare name and the usual absolute path are

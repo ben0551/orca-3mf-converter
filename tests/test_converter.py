@@ -745,6 +745,46 @@ def main():
               str(stored))
         check("and is announced as saved", inbox[-1]["message"] == "Token saved.", "")
 
+        # --- the token must survive a plugin update -------------------------
+        # Installed the way OrcaSlicer installs it: <datadir>/orca_plugins/<name>/
+        datadir = tempfile.mkdtemp(prefix="ffc5-datadir-")
+        plugdir = os.path.join(datadir, "orca_plugins", "3mf-converter_any.py")
+        os.makedirs(plugdir)
+        shutil.copy2(os.path.join(ROOT, "3mf-converter_any.py"),
+                     os.path.join(plugdir, "3mf-converter_any.py"))
+        with open(os.path.join(plugdir, "settings.json"), "w", encoding="utf-8") as fh:
+            json.dump({"bambu_token": "tok-legacy"}, fh)
+
+        spec = importlib.util.spec_from_file_location(
+            "mwc5_installed", os.path.join(plugdir, "3mf-converter_any.py"))
+        installed = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installed)
+
+        home = os.path.join(datadir, "orca_plugin_data", "3mf-converter")
+        check("an installed plugin keeps settings beside orca_plugins, not in it",
+              installed.settings_home() == home, installed.settings_home())
+        check("a token saved by an older version is still read",
+              installed.load_settings()["bambu_token"] == "tok-legacy",
+              str(installed.load_settings()))
+
+        ok, error = installed.save_settings({"bambu_token": "tok-new"})
+        check("saving writes the durable copy",
+              ok and json.load(open(os.path.join(home, "settings.json")))
+              ["bambu_token"] == "tok-new", error or "")
+
+        # An update replaces the plugin directory and nothing else.
+        shutil.rmtree(plugdir)
+        os.makedirs(plugdir)
+        shutil.copy2(os.path.join(ROOT, "3mf-converter_any.py"),
+                     os.path.join(plugdir, "3mf-converter_any.py"))
+        spec = importlib.util.spec_from_file_location(
+            "mwc5_updated", os.path.join(plugdir, "3mf-converter_any.py"))
+        updated = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(updated)
+        check("the token survives an update that replaces the plugin directory",
+              updated.load_settings()["bambu_token"] == "tok-new",
+              str(updated.load_settings()))
+
         page.on_message({"type": "resolve", "url": "https://makerworld.com/en/models/15106"})
         resolved = [m for m in inbox if m.get("type") == "resolved"][-1]
         check("resolving a link posts the plates it found",
