@@ -1,24 +1,20 @@
-"""MakerWorld C5 — an OrcaSlicer plugin that rebuilds a MakerWorld project for
-the printer you actually own.
+"""3mf Converter — an OrcaSlicer plugin that rebuilds a .3mf for the printer you
+actually own.
 
 What it does
 ------------
-A MakerWorld ``.3mf`` is a Bambu Studio project. Opened as-is it is not a broken
-file: OrcaSlicer ships the BBL profiles, so it loads cleanly and slices for the
-*designer's* machine - wrong bed, wrong machine limits, wrong start and end
-G-code - while everything the designer tuned is buried under a printer the user
-does not own.
+A MakerWorld or Printables ``.3mf`` is a Bambu Studio project. Opened as-is it is
+not a broken file: OrcaSlicer ships the BBL profiles, so it loads cleanly and
+slices for the *designer's* machine - wrong bed, wrong machine limits, wrong
+start and end G-code - while everything the designer tuned is buried under a
+printer the user does not own.
 
-This plugin resolves a MakerWorld link, downloads the plate you pick, swaps every
-setting the *machine* owns for the selected printer's, keeps every setting the
-designer actually tuned, and hands the result to the running OrcaSlicer.
+This plugin takes a MakerWorld link or a local ``.3mf``, swaps every setting the
+*machine* owns for the selected printer's, keeps every setting the designer
+actually tuned, and hands the result to the running OrcaSlicer.
 
 Only the Python standard library is used, so nothing has to be downloaded at
 plugin load time.
-
-The FlashForge device tab and printer agent are a **separate** plugin
-(``flashforge-c5``) so the two can be installed, updated and versioned
-independently.
 
 Author: Ben Fischer.  License: MIT.
 """
